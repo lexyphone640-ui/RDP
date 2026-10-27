@@ -1,0 +1,403 @@
+
+# rdpfree-workflow-schema: 6
+name: RdpFree — RDP 6 Jam
+
+on:
+  workflow_dispatch:
+    inputs:
+      durasi_menit:
+        description: 'Durasi sesi (menit, 10–360)'
+        required: false
+        default: '360'
+        type: string
+      hostname:
+        description: 'Prefix hostname VM'
+        required: false
+        default: 'rdpfree'
+        type: string
+      rdp_user:
+        description: 'Username RDP (3–20 karakter)'
+        required: false
+        default: 'xyadmin'
+        type: string
+      akses:
+        description: 'Jalur akses privat ke RDP'
+        required: false
+        default: 'tailscale'
+        type: choice
+        options:
+          - tailscale
+      storage_boost:
+        description: 'Bersihkan toolcache untuk ruang disk ekstra'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      debloat:
+        description: 'Mode pembersihan layanan latar'
+        required: false
+        default: 'ringan'
+        type: choice
+        options:
+          - ringan
+          - full
+          - tidak
+      samp:
+        description: 'Pasang runtime + SilentPatch GTA SA & SA-MP'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      win10:
+        description: 'Terapkan tampilan gaya Windows 10'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      xydesk:
+        description: 'Aktifkan optimasi host XyDesk Remote (AVC444 + ClearType + audio)'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      ekstra:
+        description: 'Pasang aplikasi ekstra (7-Zip, Chrome, Lightshot, wallpaper)'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      grafis:
+        description: 'Akselerasi OpenGL 4.6 D3D12 (Mesa3D untuk Minecraft & Game)'
+        required: false
+        default: 'software'
+        type: choice
+        options:
+          - software
+          - tidak
+      runner:
+        description: 'OS & Image Runner (Windows / Linux Desktop / Linux Polos)'
+        required: false
+        default: 'windows-2022'
+        type: choice
+        options:
+          - windows-2022
+          - windows-2025
+          - windows-latest
+          - ubuntu-24.04
+          - ubuntu-22.04
+          - ubuntu-latest
+      linux_mode:
+        description: 'Mode Linux (desktop = XFCE4 GUI XRDP :3389, polos = Server SSH Tanpa XFCE4 :22/:3389)'
+        required: false
+        default: 'desktop'
+        type: choice
+        options:
+          - desktop
+          - polos
+      microphone:
+        description: 'Aktifkan redireksi mikrofon & kamera RDP'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      roblox:
+        description: 'Siapkan installer Roblox Player'
+        required: false
+        default: 'tidak'
+        type: choice
+        options:
+          - ya
+          - tidak
+      minecraft_java:
+        description: 'Pasang Minecraft Java + JDK 21/JRE 8 + OpenGL 4.6 D3D12'
+        required: false
+        default: 'tidak'
+        type: choice
+        options:
+          - ya
+          - tidak
+      minecraft_bedrock:
+        description: 'Pasang Minecraft Launcher (Bedrock)'
+        required: false
+        default: 'tidak'
+        type: choice
+        options:
+          - ya
+          - tidak
+      perpanjang_otomatis:
+        description: 'Lanjutkan otomatis ke sesi berikutnya saat waktu habis (data tetap utuh)'
+        required: false
+        default: 'ya'
+        type: choice
+        options:
+          - ya
+          - tidak
+      discord:
+        description: 'Pasang aplikasi Discord desktop'
+        required: false
+        default: 'tidak'
+        type: choice
+        options:
+          - ya
+          - tidak
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: rdpfree-active-session
+  cancel-in-progress: false
+
+jobs:
+  rdp:
+    name: Sesi RDP (${{ inputs.runner || 'windows-2022' }})
+    runs-on: ${{ inputs.runner || 'windows-2022' }}
+    timeout-minutes: 360
+    env:
+      DUR: ${{ inputs.durasi_menit || '360' }}
+      HOSTNAME: ${{ inputs.hostname || 'rdpfree' }}
+      RDP_USER: ${{ inputs.rdp_user || 'xyadmin' }}
+      RDP_PASSWORD: ${{ secrets.RDP_PASSWORD }}
+      AKSES: ${{ inputs.akses || 'tailscale' }}
+      TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+      STORAGE_BOOST: ${{ inputs.storage_boost || 'ya' }}
+      DEBLOAT: ${{ inputs.debloat || 'ringan' }}
+      SAMP: ${{ inputs.samp || 'ya' }}
+      WIN10: ${{ inputs.win10 || 'ya' }}
+      XYDESK: ${{ inputs.xydesk || 'ya' }}
+      EKSTRA: ${{ inputs.ekstra || 'ya' }}
+      GRAFIS: ${{ inputs.grafis || 'software' }}
+      LINUX_MODE: ${{ inputs.linux_mode || 'desktop' }}
+      MICROPHONE: ${{ inputs.microphone || 'ya' }}
+      ROBLOX: ${{ inputs.roblox || 'tidak' }}
+      MINECRAFT_JAVA: ${{ inputs.minecraft_java || 'tidak' }}
+      MINECRAFT_BEDROCK: ${{ inputs.minecraft_bedrock || 'tidak' }}
+      DISCORD: ${{ inputs.discord || 'tidak' }}
+      PERPANJANG_OTOMATIS: ${{ inputs.perpanjang_otomatis || 'ya' }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ======================================================================
+      # JALUR LINUX DESKTOP RDP / LINUX POLOS SSH VPS (Ubuntu 24.04 / 22.04 / Latest)
+      # ======================================================================
+      - name: Setup dasar RDP & Akses Linux (XRDP :3389 / SSH :22 + Tailscale)
+        if: ${{ startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: bash
+        run: |
+          chmod +x ./scripts/setup-linux-rdp.sh
+          ./scripts/setup-linux-rdp.sh --setup-only
+      - name: Jaga sesi tetap hidup (keepalive + auto-checkpoint 15m) [Linux]
+        if: ${{ startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: bash
+        run: ./scripts/setup-linux-rdp.sh --keepalive-only
+
+      - name: Finalize (matikan sesi + bersihkan status) [Linux]
+        if: ${{ always() && startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: bash
+        continue-on-error: true
+        run: ./scripts/setup-linux-rdp.sh --finalize-only
+
+      # ======================================================================
+      # JALUR WINDOWS DESKTOP RDP (Windows Server 2022 / 2025 / Latest)
+      # ======================================================================
+      - name: Bersihkan run lama
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/cleanup-actions.ps1
+
+      - name: Setup dasar RDP (user + port 3389)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        run: ./scripts/setup-rdp.ps1
+
+      - name: Pulihkan simpanan sesi sebelumnya
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/restore-state.ps1
+
+      - name: Optimasi storage runner
+        timeout-minutes: 15
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && ((inputs.storage_boost || 'ya') != 'tidak' || (inputs.debloat || 'ringan') != 'tidak') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/optimize-storage.ps1
+
+      - name: Tampilan Windows 10 + Dark Mode
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.win10 || 'ya') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-win10.ps1
+
+      - name: Tweak Explorer & Desktop
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-explorer.ps1
+
+      - name: Audio & Kamera RDP
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.microphone || 'ya') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-media.ps1
+
+      - name: Grafis OpenGL 4.6 D3D12 (Mesa3D untuk Minecraft & Game)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.grafis || 'software') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-grafis.ps1
+
+      - name: Runtime All-Software 2026 & GTA SA-MP By SilentPatch
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.samp || 'ya') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-samp.ps1
+
+      - name: Pasang Suite Game & Studio (Minecraft, Roblox, ETS 2, Blender, MEmu, FiveM)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-games.ps1
+
+      - name: Aplikasi ekstra (7-Zip, Chrome, Lightshot, Wallpaper)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.ekstra || 'ya') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-extras.ps1
+
+      - name: Pasang XyDeskTools.exe (Gaming & Tools Hub di Desktop RDP)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-tools-hub.ps1
+
+      - name: Host setup XyDesk Remote
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.xydesk || 'ya') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-xydesk.ps1
+
+      - name: Setup akses Tailscale (diaktifkan di akhir setelah semua siap)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.akses || 'tailscale') == 'tailscale' }}
+        shell: pwsh
+        run: ./scripts/setup-akses.ps1
+
+      - name: Pasang Discord desktop
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') && (inputs.discord || 'tidak') == 'ya' }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/setup-discord.ps1
+
+
+
+      - name: Publish status siap pakai (setelah seluruh aplikasi & game siap)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/publish-status.ps1
+
+      - name: Jaga sesi tetap hidup (keepalive + auto-checkpoint 15m)
+        if: ${{ !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        run: ./scripts/keepalive.ps1
+
+      - name: Simpan sesi (persist-state.ps1)
+        if: ${{ always() && !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/persist-state.ps1
+
+      - name: Upload simpanan sesi
+        if: ${{ always() && !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: xyrdp-state
+          path: C:\XyRDP\persist\xyrdp-state.zip
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Finalize (matikan sesi + bersihkan status)
+        if: ${{ always() && !startsWith(inputs.runner || 'windows-2022', 'ubuntu') }}
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/finalize-rdp.ps1
+
+      - name: Estafet sesi berikutnya (auto-renew tanpa mulai dari nol)
+        if: ${{ success() && (inputs.perpanjang_otomatis || 'ya') != 'tidak' }}
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $hdr = @{
+            Authorization          = "Bearer $($env:GITHUB_TOKEN)"
+            Accept                 = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            'User-Agent'           = 'XyRDP-AutoRenew'
+          }
+          $body = @{
+            ref    = 'main'
+            inputs = @{
+              durasi_menit        = "$($env:DUR)"
+              hostname            = "$($env:HOSTNAME)"
+              rdp_user            = "$($env:RDP_USER)"
+              akses               = "$($env:AKSES)"
+              storage_boost       = "$($env:STORAGE_BOOST)"
+              debloat             = "$($env:DEBLOAT)"
+              samp                = "$($env:SAMP)"
+              win10               = "$($env:WIN10)"
+              xydesk              = "$($env:XYDESK)"
+              ekstra              = "$($env:EKSTRA)"
+              grafis              = "$($env:GRAFIS)"
+              runner              = "${{ inputs.runner || 'windows-2022' }}"
+              linux_mode          = "$($env:LINUX_MODE)"
+              microphone          = "$($env:MICROPHONE)"
+              roblox              = "$($env:ROBLOX)"
+              minecraft_java      = "$($env:MINECRAFT_JAVA)"
+              minecraft_bedrock   = "$($env:MINECRAFT_BEDROCK)"
+              discord             = "$($env:DISCORD)"
+              perpanjang_otomatis = "$($env:PERPANJANG_OTOMATIS)"
+            }
+          } | ConvertTo-Json -Depth 5
+          try {
+            # Anti-Suspend Guard untuk Akun Baru GitHub:
+            # 1) Cek umur akun pemilik repo. Jika akun baru berumur < 7 hari, jangan lakukan
+            #    self-retrigger tanpa henti karena sistem otomatis GitHub mendeteksinya sebagai bot loop.
+            # 2) Beri jeda acak sopan (15-25 detik) sebelum memicu sesi estafet berikutnya.
+            $ownerName = ($env:GITHUB_REPOSITORY -split '/')[0]
+            $allowAutoRenew = $true
+            try {
+              $usrObj = Invoke-RestMethod -Uri "https://api.github.com/users/$ownerName" -Headers $hdr -TimeoutSec 15
+              if ($usrObj -and $usrObj.created_at) {
+                $ageDays = ([DateTime]::UtcNow - [DateTime]::Parse($usrObj.created_at).ToUniversalTime()).TotalDays
+                if ($ageDays -lt 7) {
+                  Write-Host "Anti-Suspend Guard: Akun @$ownerName masih berumur $([math]::Round($ageDays,1)) hari (< 7 hari). Auto-retrigger dilewati demi keamanan akun baru (silakan nyalakan sesi berikutnya secara manual dari aplikasi)."
+                  $allowAutoRenew = $false
+                }
+              }
+            } catch {}
+            if ($allowAutoRenew) {
+              Start-Sleep -Seconds (Get-Random -Minimum 15 -Maximum 26)
+              Invoke-RestMethod -Uri "https://api.github.com/repos/$($env:GITHUB_REPOSITORY)/actions/workflows/rdp-6h.yml/dispatches" `
+                -Headers $hdr -Method Post -ContentType 'application/json' -Body $body -TimeoutSec 20 | Out-Null
+              Write-Host 'Sesi berikutnya berhasil dijadwalkan otomatis (data sesi ini sudah tersimpan).'
+            }
+          } catch {
+            Write-Host "Auto-renew dilewati: $($_.Exception.Message)"
+          }
